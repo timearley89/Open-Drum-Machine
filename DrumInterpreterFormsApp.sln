@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28010.2036
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrumInterpreterFormsApp", "DrumInterpreterFormsApp\DrumInterpreterFormsApp.csproj", "{42E35F9A-3B90-435B-9859-9C345AEB06B8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{42E35F9A-3B90-435B-9859-9C345AEB06B8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{42E35F9A-3B90-435B-9859-9C345AEB06B8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{42E35F9A-3B90-435B-9859-9C345AEB06B8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{42E35F9A-3B90-435B-9859-9C345AEB06B8}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {007BBE3C-662D-4763-AEE8-7958F0C1CB01}
+	EndGlobalSection
+EndGlobal
