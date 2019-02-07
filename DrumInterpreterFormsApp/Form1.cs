@@ -5,6 +5,7 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Media;
@@ -13,19 +14,10 @@ using System.Runtime.Hosting;
 
 
 /*
- * The idea is this: Using asynchronous media players, define one for each drum, with "browse..." buttons to select each sample. Once samples are loaded, 
- * check to see if a serial connection is available on the com port by sending a chunk of data to each available port, and wait for an identification response(use bytes).
- * Once the correct response is received, begin steady communication with the device on that port, using 1 byte for each drum trigger, allowing for velocity sensing.
- * This byte will be interpreted here as a command to play x sample at volume y%. Potentially allow for connection via bluetooth. The maximum amount of drum triggers will be
- * 8, because 8 bytes is one 64-bit packet.  Maybe it could use more? Do I have to limit it that way? Or could I have a specific byte value serve as a 'STOP' value that signifies
- * the end of a concurrent 'packet'? This way, more drums may be a bit slower in it's response time, but could still be acceptable...
- * sound.VolumePercentage = ((int)byte / 255) * 100;
- * 
- * I need:
- *  -A function that sets up the array of media players, and event handlers for each OpenFileDialog.Open() event, to change the current sample
- *  -A function that checks COM ports for an active receiver
- *  -A function that receives and interprets data packets as play commands, and plays each one, sending a "Ready" signal each time(use 00000000 for 'Ready' and 'STOP' signals)
- *  -A function that saves and loads sample selections for easy playing once initial setup is done
+ * Arduino now seems to be sending correct(mostly) data - need to "debounce" the buttons or add schmidt triggers
+ * Forms App locks up after trying to play too much, too fast - need to determine why, could be related to media player list memory consumption, or data packets
+ * going out of sync (byte 1 shows up in byte 4 position, etc)
+ * Consider conversion to DirectSound API for faster async audio playback(may not be needed?) -Measure audio playback time to see if below 50ms(20Hz max drum speed)
 */
 
 
@@ -40,9 +32,9 @@ namespace DrumInterpreterFormsApp
         Button[] btnsBrowse = new Button[8];
         Button[] btnsPlay = new Button[8];
         TextBox[] texts = new TextBox[8];
-        int[] Volumes = new int[8];
-        List<MediaPlayer> players;
+        double[] Volumes = new double[8];
         Uri[] uris;
+        byte[] playdata = new byte[9];
 
         public frmDrum()
         {
@@ -54,10 +46,10 @@ namespace DrumInterpreterFormsApp
         {
             
             uris = new Uri[8];
-            players = new List<MediaPlayer>();
             Setup();
             GetSerial();
-            serialPort1.DataReceived += (snd, arg) => GotData();
+            serialPort1.DataReceived += (sndr, args) => GotData();
+            timer1.Tick += (sndr, args) => GetDrums();
         }
         public bool Browse(int BtnIndex, out Uri uri)
         {
@@ -112,10 +104,7 @@ namespace DrumInterpreterFormsApp
             texts[5] = txtDrum6;
             texts[6] = txtDrum7;
             texts[7] = txtDrum8;
-            for (int i = 0; i < Volumes.Length; i++)
-            {
-                Volumes[i] = 100;
-            }
+            
             foreach (Button btn in btnsBrowse)
             {
                 btn.Click += (sndr, args) =>
@@ -146,21 +135,15 @@ namespace DrumInterpreterFormsApp
                     {
                         if (sndr.Equals(btnsPlay[i]))
                         {
-                            players.Add(new MediaPlayer());
-                            players[players.Count - 1].Open(uris[i]);
-                            players[players.Count - 1].MediaEnded += (sendr, arg) =>
-                            {
-                                int indx = players.FindIndex((plyr) => sendr == plyr);
-                                players.RemoveAt(indx);
-                            };
-                            if (args != EventArgs.Empty)
-                            {
-                                
-                            }
-                            players[players.Count - 1].Volume = (double)Volumes[i];
-                            players[players.Count - 1].Play();
+                            playdata[i + 1] = 255;
                         }
+                        else
+                        {
+                            playdata[i + 1] = 0;
+                        }
+                        
                     }
+                    PlayDrum(playdata);
                 };
             } //Play EventHandler Setup
         }
@@ -283,43 +266,146 @@ namespace DrumInterpreterFormsApp
                 cOMPortToolStripMenuItem.ComboBox.SelectedIndexChanged += (sandur, ergs) =>
                 {
                     ToolStripMenuItem menu = cOMPortToolStripMenuItem.ComboBox.SelectedItem as ToolStripMenuItem;
-                    if (serialPort1.IsOpen)
-                    {
-                        serialPort1.Close();
-                    }
-                    serialPort1.PortName = menu.Text;
-                    try
-                    {
-                        serialPort1.BaudRate = 115200;
-                        serialPort1.Open();
-                        MessageBox.Show("Port Opened Successfully", "Port Open");
-                    }
-                    catch
-                    {
-                        MessageBox.Show("Port could not be opened.", "Serial Error");
-                    }
+                    
+                        if (serialPort1.IsOpen)
+                        {
+                            serialPort1.Close();
+                        }
+                        
+
+                        serialPort1.PortName = menu.Text;
+                        try
+                        {
+                            serialPort1.BaudRate = 115200;
+                            serialPort1.Open();
+                            MessageBox.Show("Port Opened Successfully", "Port Open");
+                            timer1.Start();
+                        
+                            
+                        }
+                        catch
+                        {
+                            MessageBox.Show("Port could not be opened.", "Serial Error");
+                            if (serialPort1.IsOpen) { serialPort1.Close(); }
+                            if (timer1.Enabled) { timer1.Stop(); }
+                        }
+                    
                 };
             }
         }
         public void GotData()
         {
+            
+            
             //read data from serial buffer, decode it into volume-sensitive commands for each drum, play them, and flush the buffer
-            if (serialPort1.BytesToRead == 8)
+            if (serialPort1.BytesToRead == 12)
             {
-                byte[] data = new byte[8];
-                serialPort1.Read(data, 0, 8);
-                int[] commands = new int[8];
-                for (int i = 0; i < data.Length; i++)
+                byte[] data = new byte[12];
+                serialPort1.Read(data, 0, 12);
+                switch (data[0])
                 {
-                    Volumes[i] = (data[i] * 100)/ 255;
-                    foreach (Button btn in btnsPlay)
-                    {
-                        btn.PerformClick();
-                    }
+                    case 127:
+                        switch (data[1])
+                        {
+                            case 60:
+                                switch (data[11])
+                                {
+                                    case 67:
+                                        {
+                                            byte[] comds = new byte[9]; //make this only call play if data[3-10] != 0
+                                            for (int i = 2; i < 11; i++)
+                                            {
+                                                comds[i - 2] = data[i];
+                                            }
+                                            for (int i = 1; i < comds.Length; i++)
+                                            {
+                                                if (comds[i] != 0)
+                                                {
+                                                    PlayDrum(comds);
+                                                }
+                                            }
+                                            
+                                        }
+                                        break;
+                                    
+                                }
+                                break;
+                            
+                        }
+                        break;
+                    
                 }
+
+
+                
                 serialPort1.DiscardInBuffer();
             }
-            //else, just keep stacking into the inbuffer until there are 8 bytes present
+            //else, just keep stacking into the inbuffer until there are 12 bytes present
         }
+        public void GetDrums()
+        {
+            byte[] output = new byte[12];   //build array to send out, containing identifier bytes
+            output[0] = 127;
+            output[1] = 60;
+            output[11] = 67;
+            for (int i = 2; i < 11; i++)
+            {
+                output[i] = 0;
+            }
+            if (serialPort1.IsOpen)
+            {
+                serialPort1.Write(output, 0, 12);   //if a response is sent, it will trigger DataReceived event.
+            }
+            else { GetSerial(); }
+        }
+
+
+
+        public void PlayDrum(byte[] datain) //Working properly
+        {
+            try
+            {
+                for (int i = 1; i < datain.Length; i++)
+                {
+                    if ((uint)datain[i] != 0 && (uint)datain[i] >= (uint)datain[0])   //Check to see if the volume data for each drum meets the user-defined threshold sent from arduino && not 0
+                    {
+                        double x = (double)datain[i];
+                        int a = i - 1;
+                        object[] p = { x, a };
+                        object d = p;
+                        
+                        //Create a thread with a new media player, load the source file, play it, then dispose of the thread. This avoids relying on EventHandlers that may not work.
+                        ParameterizedThreadStart tstart = new ParameterizedThreadStart((o) => {
+                            MediaPlayer player = new MediaPlayer();
+                            object[] input = (object[])o;
+                            player.Volume = (double)input[0] / (double)255;
+                            player.Open(uris[(int)input[1]]);
+                            player.Volume = x / 255;
+                            while (!player.NaturalDuration.HasTimeSpan)
+                            {
+                                Thread.Sleep(1);
+                            }
+                            player.Play();
+                            if (player.NaturalDuration.HasTimeSpan) { Thread.Sleep((int)player.NaturalDuration.TimeSpan.TotalMilliseconds); }
+                            player.Dispatcher.BeginInvokeShutdown(System.Windows.Threading.DispatcherPriority.Normal);
+                            player.Close();
+                            player = null;
+                        });
+                        Thread t = new Thread(tstart);
+                        t.Start(d);
+                        
+
+                    }
+
+                }
+                
+            }
+            catch
+            {
+                MessageBox.Show("Play Problem");
+            }
+
+        }
+                
     }
 }

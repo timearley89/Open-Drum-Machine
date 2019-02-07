@@ -74,6 +74,7 @@
             this.userGuideToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.aboutToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.cOMPortToolStripMenuItem = new System.Windows.Forms.ToolStripComboBox();
+            this.timer1 = new System.Windows.Forms.Timer(this.components);
             this.grpDrum1.SuspendLayout();
             this.grpDrum2.SuspendLayout();
             this.grpDrum3.SuspendLayout();
@@ -510,6 +511,10 @@
             this.cOMPortToolStripMenuItem.Text = "COM Port...";
             this.cOMPortToolStripMenuItem.Click += new System.EventHandler(this.cOMPortToolStripMenuItem_Click);
             // 
+            // timer1
+            // 
+            this.timer1.Interval = 50;
+            // 
             // frmDrum
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -598,6 +603,7 @@
         private System.Windows.Forms.ToolStripMenuItem userGuideToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem aboutToolStripMenuItem;
         private System.Windows.Forms.ToolStripComboBox cOMPortToolStripMenuItem;
+        private System.Windows.Forms.Timer timer1;
     }
 }
 
